@@ -69,7 +69,6 @@ export default function App() {
 
     return () => clearInterval(spawn);
   }, [gameOver]);
-
   // Main game loop: move bullets & enemies, check collisions
   useEffect(() => {
     if (gameOver) return;
