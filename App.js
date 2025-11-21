@@ -12,20 +12,27 @@ const BULLET_WIDTH = 10;
 const BULLET_HEIGHT = 20;
 const BLOCK_WIDTH = 40;
 const BLOCK_HEIGHT = 40;
+const STARTING_LIVES = 3;
 
 export default function App() {
+  const [lives, setLives] = useState(STARTING_LIVES);
   const [playerX, setPlayerX] = useState((screenWidth - PLAYER_WIDTH) / 2);
   const [bullets, setBullets] = useState([]);
   const [enemies, setEnemies] = useState([]);
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
 
-  // Refs to keep real-time data
+  // Refs for real-time updates inside game loop
+  const livesRef = useRef(lives);
   const bulletsRef = useRef([]);
   const enemiesRef = useRef([]);
   const playerXRef = useRef(playerX);
 
-  // Keep refs updated
+  // Sync refs when states change
+  useEffect(() => {
+    livesRef.current = lives;
+  }, [lives]);
+
   useEffect(() => {
     bulletsRef.current = bullets;
   }, [bullets]);
@@ -43,7 +50,6 @@ export default function App() {
     Accelerometer.setUpdateInterval(16);
     const subscription = Accelerometer.addListener(({ x }) => {
       if (gameOver) return;
-
       const move = x * 20;
       setPlayerX((prevX) => {
         const newX = prevX + move;
@@ -56,13 +62,13 @@ export default function App() {
     return () => subscription.remove();
   }, [gameOver]);
 
-  // Spawn new enemies every second
+  // Spawn enemies every second
   useEffect(() => {
     if (gameOver) return;
 
     const spawn = setInterval(() => {
       const enemy = {
-        id: Date.now().toString(),
+        id: Date.now().toString() + Math.random().toString(36).slice(2),
         x: Math.random() * (screenWidth - BLOCK_WIDTH),
         y: -BLOCK_HEIGHT,
       };
@@ -87,24 +93,32 @@ export default function App() {
         .map((b) => ({ ...b, y: b.y - 10 }))
         .filter((b) => b.y > -BULLET_HEIGHT);
 
-      // ---- ENEMY MOVEMENT + BOTTOM COLLISION ----
-
       // Move enemies downward
       const movedEnemies = prevEnemies.map((e) => ({
         ...e,
         y: e.y + 5,
       }));
 
-      // If ANY enemy hits the bottom → GAME OVER
+      // CHECK: any enemy reached bottom -> lose a life
       for (let e of movedEnemies) {
-        const bottom = screenHeight - 20;
+        const bottomLimit = screenHeight - 20; // floor level where player stands
 
-        if (e.y + BLOCK_HEIGHT >= bottom) {
+        if (e.y + BLOCK_HEIGHT >= bottomLimit) {
+          // Lose a life
+          const newLives = Math.max(0, livesRef.current - 1);
+          livesRef.current = newLives;
+          setLives(newLives);
+
+          // Clear bullets and enemies to give player a breather (unless game over)
           bulletsRef.current = [];
           enemiesRef.current = [];
           setBullets([]);
           setEnemies([]);
-          setGameOver(true);
+
+          if (newLives <= 0) {
+            setGameOver(true);
+          }
+          // Stop processing this tick (we handled the event)
           return;
         }
       }
@@ -114,7 +128,7 @@ export default function App() {
         (e) => e.y < screenHeight + BLOCK_HEIGHT
       );
 
-      // ---- BULLET → ENEMY COLLISION ----
+      // BULLET <-> ENEMY collision
       const remainingBullets = [];
       const remainingEnemies = [...filteredEnemies];
       let hits = 0;
@@ -132,6 +146,7 @@ export default function App() {
             b.y + BULLET_HEIGHT > e.y;
 
           if (collided) {
+            // remove that enemy
             remainingEnemies.splice(i, 1);
             hits++;
             hit = true;
@@ -142,29 +157,35 @@ export default function App() {
         if (!hit) remainingBullets.push(b);
       }
 
-      // ---- PLAYER COLLISION WITH ENEMY ----
+      // PLAYER collision with enemy -> lose a life
       const playerTop = screenHeight - PLAYER_HEIGHT - 20;
-
       for (let e of remainingEnemies) {
-        const collided =
+        const collidedWithPlayer =
           e.x < playerXRef.current + PLAYER_WIDTH &&
           e.x + BLOCK_WIDTH > playerXRef.current &&
           e.y + BLOCK_HEIGHT > playerTop;
 
-        if (collided) {
+        if (collidedWithPlayer) {
+          const newLives = Math.max(0, livesRef.current - 1);
+          livesRef.current = newLives;
+          setLives(newLives);
+
+          // clear bullets and enemies for a breather (or end if lives 0)
           bulletsRef.current = [];
           enemiesRef.current = [];
           setBullets([]);
           setEnemies([]);
-          setGameOver(true);
+
+          if (newLives <= 0) {
+            setGameOver(true);
+          }
           return;
         }
       }
 
-      // ---- COMMIT UPDATES ----
+      // Commit updates
       bulletsRef.current = remainingBullets;
       enemiesRef.current = remainingEnemies;
-
       setBullets(remainingBullets);
       setEnemies(remainingEnemies);
 
@@ -174,7 +195,7 @@ export default function App() {
     return () => clearInterval(tick);
   }, [gameOver]);
 
-  // Shoot bullet / Restart
+  // Shoot bullet (or restart if game over)
   const handlePress = () => {
     if (gameOver) {
       restartGame();
@@ -182,7 +203,7 @@ export default function App() {
     }
 
     const bullet = {
-      id: Date.now().toString(),
+      id: Date.now().toString() + Math.random().toString(36).slice(2),
       x: playerX + (PLAYER_WIDTH - BULLET_WIDTH) / 2,
       y: screenHeight - PLAYER_HEIGHT - 40,
     };
@@ -197,6 +218,8 @@ export default function App() {
     setBullets([]);
     setEnemies([]);
     setScore(0);
+    setLives(STARTING_LIVES);
+    livesRef.current = STARTING_LIVES;
     setGameOver(false);
     setPlayerX((screenWidth - PLAYER_WIDTH) / 2);
   };
@@ -228,6 +251,7 @@ export default function App() {
         <Stars />
 
         <Text style={styles.score}>Score: {score}</Text>
+        <Text style={styles.lives}>Lives: {lives}</Text>
 
         {/* Player */}
         <View style={[styles.player, { left: playerX }]} />
@@ -236,7 +260,7 @@ export default function App() {
         {bullets.map((b) => (
           <View
             key={b.id}
-            style={[styles.bullet, { left: b.x, top: b.y }]}
+            style={[styles.bullet, { left: Math.round(b.x), top: Math.round(b.y) }]}
           />
         ))}
 
@@ -244,7 +268,7 @@ export default function App() {
         {enemies.map((e) => (
           <View
             key={e.id}
-            style={[styles.enemy, { left: e.x, top: e.y }]}
+            style={[styles.enemy, { left: Math.round(e.x), top: Math.round(e.y) }]}
           />
         ))}
 
@@ -303,13 +327,25 @@ const styles = StyleSheet.create({
 
   score: {
     position: "absolute",
-    top: 75,
+    top: 80,
     left: 20,
     fontSize: 24,
     color: "#00E5FF",
     textShadowColor: "#00E5FF",
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 12,
+  },
+
+  lives: {
+    position: "absolute",
+    top: 80,
+    right: 20,
+    fontSize: 24,
+    color: "#FF4081",
+    textShadowColor: "#FF4081",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+    fontFamily: "Courier",
   },
 
   gameOver: {
