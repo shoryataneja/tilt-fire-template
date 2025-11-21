@@ -20,18 +20,20 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
 
-  // Refs to keep the latest arrays for the fast game loop (avoid stale closures)
+  // Refs to keep real-time data
   const bulletsRef = useRef([]);
   const enemiesRef = useRef([]);
   const playerXRef = useRef(playerX);
 
-  // Keep refs in-sync when states change
+  // Keep refs updated
   useEffect(() => {
     bulletsRef.current = bullets;
   }, [bullets]);
+
   useEffect(() => {
     enemiesRef.current = enemies;
   }, [enemies]);
+
   useEffect(() => {
     playerXRef.current = playerX;
   }, [playerX]);
@@ -41,6 +43,7 @@ export default function App() {
     Accelerometer.setUpdateInterval(16);
     const subscription = Accelerometer.addListener(({ x }) => {
       if (gameOver) return;
+
       const move = x * 20;
       setPlayerX((prevX) => {
         const newX = prevX + move;
@@ -53,50 +56,75 @@ export default function App() {
     return () => subscription.remove();
   }, [gameOver]);
 
-  // Spawn enemies every 1 second
+  // Spawn new enemies every second
   useEffect(() => {
     if (gameOver) return;
+
     const spawn = setInterval(() => {
       const enemy = {
-        id: Date.now().toString() + Math.random().toString(36).slice(2),
+        id: Date.now().toString(),
         x: Math.random() * (screenWidth - BLOCK_WIDTH),
-        y: -BLOCK_HEIGHT, // start just above the screen
+        y: -BLOCK_HEIGHT,
       };
-      // update both state and ref
+
       enemiesRef.current = [...enemiesRef.current, enemy];
       setEnemies(enemiesRef.current);
     }, 1000);
 
     return () => clearInterval(spawn);
   }, [gameOver]);
-  // Main game loop: move bullets & enemies, check collisions
+
+  // Main game loop
   useEffect(() => {
     if (gameOver) return;
 
     const tick = setInterval(() => {
-      // Read current lists from refs
       const prevBullets = bulletsRef.current;
       const prevEnemies = enemiesRef.current;
 
-      // Move bullets up
+      // Move bullets upward
       const movedBullets = prevBullets
-        .map((b) => ({ ...b, y: Math.round(b.y - 10) }))
+        .map((b) => ({ ...b, y: b.y - 10 }))
         .filter((b) => b.y > -BULLET_HEIGHT);
 
-      // Move enemies down
-      const movedEnemies = prevEnemies
-        .map((e) => ({ ...e, y: Math.round(e.y + 5) }))
-        .filter((e) => e.y < screenHeight + BLOCK_HEIGHT);
+      // ---- ENEMY MOVEMENT + BOTTOM COLLISION ----
 
-      // Collision detection: bullets vs enemies
+      // Move enemies downward
+      const movedEnemies = prevEnemies.map((e) => ({
+        ...e,
+        y: e.y + 5,
+      }));
+
+      // If ANY enemy hits the bottom → GAME OVER
+      for (let e of movedEnemies) {
+        const bottom = screenHeight - 20;
+
+        if (e.y + BLOCK_HEIGHT >= bottom) {
+          bulletsRef.current = [];
+          enemiesRef.current = [];
+          setBullets([]);
+          setEnemies([]);
+          setGameOver(true);
+          return;
+        }
+      }
+
+      // Cleanup: keep enemies only if inside screen
+      const filteredEnemies = movedEnemies.filter(
+        (e) => e.y < screenHeight + BLOCK_HEIGHT
+      );
+
+      // ---- BULLET → ENEMY COLLISION ----
       const remainingBullets = [];
-      const remainingEnemies = [...movedEnemies];
+      const remainingEnemies = [...filteredEnemies];
       let hits = 0;
 
       for (let b of movedBullets) {
         let hit = false;
+
         for (let i = 0; i < remainingEnemies.length; i++) {
           const e = remainingEnemies[i];
+
           const collided =
             b.x < e.x + BLOCK_WIDTH &&
             b.x + BULLET_WIDTH > e.x &&
@@ -104,43 +132,39 @@ export default function App() {
             b.y + BULLET_HEIGHT > e.y;
 
           if (collided) {
-            // remove that enemy
             remainingEnemies.splice(i, 1);
-            hit = true;
             hits++;
+            hit = true;
             break;
           }
         }
+
         if (!hit) remainingBullets.push(b);
       }
 
-      // Player collision with any enemy -> game over
+      // ---- PLAYER COLLISION WITH ENEMY ----
       const playerTop = screenHeight - PLAYER_HEIGHT - 20;
-      let playerHit = false;
+
       for (let e of remainingEnemies) {
-        const collidedWithPlayer =
+        const collided =
           e.x < playerXRef.current + PLAYER_WIDTH &&
           e.x + BLOCK_WIDTH > playerXRef.current &&
           e.y + BLOCK_HEIGHT > playerTop;
-        if (collidedWithPlayer) {
-          playerHit = true;
-          break;
+
+        if (collided) {
+          bulletsRef.current = [];
+          enemiesRef.current = [];
+          setBullets([]);
+          setEnemies([]);
+          setGameOver(true);
+          return;
         }
       }
 
-      if (playerHit) {
-        // stop the game and clear game objects
-        bulletsRef.current = [];
-        enemiesRef.current = [];
-        setBullets([]);
-        setEnemies([]);
-        setGameOver(true);
-        return;
-      }
-
-      // commit updates to refs + state
+      // ---- COMMIT UPDATES ----
       bulletsRef.current = remainingBullets;
       enemiesRef.current = remainingEnemies;
+
       setBullets(remainingBullets);
       setEnemies(remainingEnemies);
 
@@ -150,20 +174,20 @@ export default function App() {
     return () => clearInterval(tick);
   }, [gameOver]);
 
-  // Shoot bullet (or restart if game over)
+  // Shoot bullet / Restart
   const handlePress = () => {
     if (gameOver) {
       restartGame();
       return;
     }
 
-    const newBullet = {
-      id: Date.now().toString() + Math.random().toString(36).slice(2),
+    const bullet = {
+      id: Date.now().toString(),
       x: playerX + (PLAYER_WIDTH - BULLET_WIDTH) / 2,
       y: screenHeight - PLAYER_HEIGHT - 40,
     };
 
-    bulletsRef.current = [...bulletsRef.current, newBullet];
+    bulletsRef.current = [...bulletsRef.current, bullet];
     setBullets(bulletsRef.current);
   };
 
@@ -174,12 +198,11 @@ export default function App() {
     setEnemies([]);
     setScore(0);
     setGameOver(false);
-    // playerX stays where it is (or we can reset it)
     setPlayerX((screenWidth - PLAYER_WIDTH) / 2);
   };
 
-  const Stars = () => {
-  return (
+  // Stars background
+  const Stars = () => (
     <>
       {[...Array(30)].map((_, i) => (
         <View
@@ -198,14 +221,12 @@ export default function App() {
       ))}
     </>
   );
-};
-
 
   return (
     <TouchableWithoutFeedback onPress={handlePress}>
-    
       <View style={styles.container}>
-       <Stars /> 
+        <Stars />
+
         <Text style={styles.score}>Score: {score}</Text>
 
         {/* Player */}
@@ -215,7 +236,7 @@ export default function App() {
         {bullets.map((b) => (
           <View
             key={b.id}
-            style={[styles.bullet, { left: Math.round(b.x), top: Math.round(b.y) }]}
+            style={[styles.bullet, { left: b.x, top: b.y }]}
           />
         ))}
 
@@ -223,24 +244,26 @@ export default function App() {
         {enemies.map((e) => (
           <View
             key={e.id}
-            style={[styles.enemy, { left: Math.round(e.x), top: Math.round(e.y) }]}
+            style={[styles.enemy, { left: e.x, top: e.y }]}
           />
         ))}
 
-        {gameOver && <Text style={styles.gameOver}>GAME OVER{'\n'}Tap to Restart</Text>}
+        {gameOver && (
+          <Text style={styles.gameOver}>GAME OVER{"\n"}Tap to Restart</Text>
+        )}
 
         <StatusBar style="light" />
       </View>
     </TouchableWithoutFeedback>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#02010A",
   },
 
-  // Neon Player
   player: {
     position: "absolute",
     bottom: 20,
@@ -254,7 +277,6 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
   },
 
-  // Neon Bullets
   bullet: {
     position: "absolute",
     width: BULLET_WIDTH,
@@ -267,7 +289,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
   },
 
-  // Neon Enemies
   enemy: {
     position: "absolute",
     width: BLOCK_WIDTH,
@@ -280,20 +301,17 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
   },
 
-  // Neon Score Text
   score: {
     position: "absolute",
-    top: 40,
+    top: 75,
     left: 20,
     fontSize: 24,
     color: "#00E5FF",
-    fontFamily: "Courier",
     textShadowColor: "#00E5FF",
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 12,
   },
 
-  // Neon Game Over Text
   gameOver: {
     position: "absolute",
     top: screenHeight / 2 - 40,
