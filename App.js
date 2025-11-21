@@ -178,9 +178,34 @@ export default function App() {
     setPlayerX((screenWidth - PLAYER_WIDTH) / 2);
   };
 
+  const Stars = () => {
+  return (
+    <>
+      {[...Array(30)].map((_, i) => (
+        <View
+          key={i}
+          style={{
+            position: "absolute",
+            top: Math.random() * screenHeight,
+            left: Math.random() * screenWidth,
+            width: 2,
+            height: 2,
+            backgroundColor: "#00E5FF",
+            borderRadius: 10,
+            opacity: Math.random(),
+          }}
+        />
+      ))}
+    </>
+  );
+};
+
+
   return (
     <TouchableWithoutFeedback onPress={handlePress}>
+    
       <View style={styles.container}>
+       <Stars /> 
         <Text style={styles.score}>Score: {score}</Text>
 
         {/* Player */}
@@ -209,46 +234,76 @@ export default function App() {
     </TouchableWithoutFeedback>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: "#02010A",
   },
+
+  // Neon Player
   player: {
     position: "absolute",
     bottom: 20,
     width: PLAYER_WIDTH,
     height: PLAYER_HEIGHT,
-    backgroundColor: "#FFF",
+    backgroundColor: "#00E5FF",
+    borderRadius: 8,
+    shadowColor: "#00E5FF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
   },
+
+  // Neon Bullets
   bullet: {
     position: "absolute",
     width: BULLET_WIDTH,
     height: BULLET_HEIGHT,
-    backgroundColor: "#FFF",
+    backgroundColor: "#76FF03",
+    borderRadius: 4,
+    shadowColor: "#76FF03",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
   },
+
+  // Neon Enemies
   enemy: {
     position: "absolute",
     width: BLOCK_WIDTH,
     height: BLOCK_HEIGHT,
-    backgroundColor: "red",
+    backgroundColor: "#FF1744",
+    borderRadius: 6,
+    shadowColor: "#FF1744",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 18,
   },
+
+  // Neon Score Text
   score: {
     position: "absolute",
     top: 40,
     left: 20,
-    fontSize: 22,
-    color: "#FFF",
+    fontSize: 24,
+    color: "#00E5FF",
     fontFamily: "Courier",
+    textShadowColor: "#00E5FF",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
   },
+
+  // Neon Game Over Text
   gameOver: {
     position: "absolute",
     top: screenHeight / 2 - 40,
     width: "100%",
     textAlign: "center",
-    color: "white",
-    fontSize: 28,
+    color: "#FF1744",
+    fontSize: 32,
     fontWeight: "bold",
+    textShadowColor: "#FF1744",
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 18,
   },
 });
